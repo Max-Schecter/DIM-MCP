@@ -114,6 +114,10 @@ async def handle_client(websocket):
 
             if mtype == "weapons":
                 state["weapons"] = msg.get("data")
+                weapons_output_path = Path.home() / "Desktop" / "dim_weapons.json"
+                with open(weapons_output_path, "w") as f:
+                    json.dump(state["weapons"], f, indent=2)
+                logger.info(f"📁 Saved weapons summary to: {weapons_output_path}")
                 logger.info("🗃️ Weapons summary received")
                 continue
 
