@@ -1,10 +1,19 @@
 /* eslint-disable no-console */
 import type { TagValue } from 'app/inventory/dim-item-info';
 import type { DimItem } from 'app/inventory/item-types';
-import { allItemsSelector, getTagSelector, storesSelector } from 'app/inventory/selectors';
+import {
+  allItemsSelector,
+  getNotesSelector,
+  getTagSelector,
+  storesSelector,
+} from 'app/inventory/selectors';
 import { buildSocketNames, csvStatNamesForDestinyVersion } from 'app/inventory/spreadsheets';
+import type { DimStore } from 'app/inventory/store-types';
+import { getStore } from 'app/inventory/stores-helpers';
 import { D1_StatHashes } from 'app/search/d1-known-values';
 import store from 'app/store/store';
+import { getItemKillTrackerInfo } from 'app/utils/item-utils';
+import { countEnhancedPerks } from 'app/utils/socket-utils';
 import { StatHashes } from 'data/d2/generated-enums';
 
 const MCP_PORT = 9130;
@@ -19,13 +28,18 @@ function sleep(ms: number) {
 function buildWeaponSummary(
   item: DimItem,
   getTag: (item: DimItem) => TagValue | undefined,
+  getNotes: (item: DimItem) => string | undefined,
   statNames: Map<number, string>,
+  stores: readonly DimStore[],
 ) {
   const stats: Record<string, number> = {};
   for (const stat of item.stats ?? []) {
     const name = statNames.get(stat.statHash) ?? stat.displayProperties.name;
     stats[name] = stat.value;
   }
+
+  const store = getStore(stores, item.owner);
+  const killTracker = getItemKillTrackerInfo(item);
 
   return {
     name: item.name,
@@ -35,7 +49,12 @@ function buildWeaponSummary(
     power: item.power,
     stats,
     perks: buildSocketNames(item),
+    owner: store?.name ?? item.owner,
+    enhancedPerks: item.sockets ? countEnhancedPerks(item.sockets) : 0,
+    craftedLevel: item.craftedInfo?.level,
+    killTracker: killTracker?.count,
     tag: getTag(item),
+    notes: getNotes(item),
   };
 }
 
@@ -43,8 +62,10 @@ async function sendWeapons() {
   const state = store.getState();
   const allItems = allItemsSelector(state);
   const getTag = getTagSelector(state);
+  const getNotes = getNotesSelector(state);
   const destinyVersion = allItems[0]?.destinyVersion ?? 2;
   const statNames = csvStatNamesForDestinyVersion(destinyVersion);
+  const stores = storesSelector(state);
 
   const weapons = allItems
     .filter(
@@ -53,7 +74,7 @@ async function sendWeapons() {
         (item.primaryStat.statHash === D1_StatHashes.Attack ||
           item.primaryStat.statHash === StatHashes.Attack),
     )
-    .map((item) => buildWeaponSummary(item, getTag, statNames));
+    .map((item) => buildWeaponSummary(item, getTag, getNotes, statNames, stores));
 
   if (socket?.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify({ type: 'weapons', data: weapons }));
