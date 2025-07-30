@@ -24,6 +24,7 @@ async def handle_client(websocket):
         "stores_received": {},   # storeIndex -> {chunks: dict, total: int}
         "stores_final": {},      # storeIndex -> parsed store object
         "currencies": None,
+        "weapons": None,
     }
     try:
         while True:
@@ -94,6 +95,7 @@ async def handle_client(websocket):
                     payload = {
                         "stores": stores_ordered,
                         "currencies": state["currencies"],
+                        "weapons": state["weapons"],
                     }
                     with open(OUTPUT_PATH, "w") as f:
                         json.dump(payload, f, indent=2)
@@ -106,7 +108,13 @@ async def handle_client(websocket):
                         "stores_received": {},
                         "stores_final": {},
                         "currencies": None,
+                        "weapons": None,
                     }
+                continue
+
+            if mtype == "weapons":
+                state["weapons"] = msg.get("data")
+                logger.info("🗃️ Weapons summary received")
                 continue
 
             # Optional: ack logging
