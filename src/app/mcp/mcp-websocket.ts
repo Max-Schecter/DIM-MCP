@@ -14,9 +14,11 @@ import {
 } from 'app/inventory/spreadsheets';
 import type { DimStore } from 'app/inventory/store-types';
 import { getStore } from 'app/inventory/stores-helpers';
+import { D1_StatHashes } from 'app/search/d1-known-values';
 import store from 'app/store/store';
 import { getItemKillTrackerInfo } from 'app/utils/item-utils';
 import { countEnhancedPerks } from 'app/utils/socket-utils';
+import { StatHashes } from 'data/d2/generated-enums';
 
 const MCP_PORT = 9130;
 const MCP_URL = `wss://localhost:${MCP_PORT}`;
@@ -27,7 +29,7 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function buildItemSummary(
+function buildWeaponSummary(
   item: DimItem,
   getTag: (item: DimItem) => TagValue | undefined,
   getNotes: (item: DimItem) => string | undefined,
@@ -44,16 +46,9 @@ function buildItemSummary(
   const killTracker = getItemKillTrackerInfo(item);
 
   return {
-    id: item.id,
-    hash: item.hash,
     name: item.name,
     type: item.typeName,
     tier: item.tier,
-    bucketHash: item.bucket.hash,
-    bucketName: item.bucket.name,
-    classType: item.classTypeNameLocalized,
-    equipped: item.equipped,
-    exotic: item.isExotic,
     element: item.element?.displayProperties.name,
     power: item.power,
     stats,
@@ -68,7 +63,7 @@ function buildItemSummary(
   };
 }
 
-async function sendItems() {
+async function sendWeapons() {
   const state = store.getState();
   const allItems = allItemsSelector(state);
   const getTag = getTagSelector(state);
@@ -77,12 +72,17 @@ async function sendItems() {
   const statNames = csvStatNamesForDestinyVersion(destinyVersion);
   const stores = storesSelector(state);
 
-  const items = allItems
-    .filter((item) => item.bucket.inWeapons || item.bucket.inArmor)
-    .map((item) => buildItemSummary(item, getTag, getNotes, statNames, stores));
+  const weapons = allItems
+    .filter(
+      (item) =>
+        item.primaryStat &&
+        (item.primaryStat.statHash === D1_StatHashes.Attack ||
+          item.primaryStat.statHash === StatHashes.Attack),
+    )
+    .map((item) => buildWeaponSummary(item, getTag, getNotes, statNames, stores));
 
   if (socket?.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify({ type: 'items', data: items }));
+    socket.send(JSON.stringify({ type: 'weapons', data: weapons }));
   }
 }
 
@@ -159,14 +159,14 @@ function handleMessage(event: MessageEvent) {
   } catch {
     if (event.data === 'ping') {
       sendInventory();
-      sendItems();
+      sendWeapons();
       return;
     }
   }
   // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   if (message && message.type === 'ping') {
     sendInventory();
-    sendItems();
+    sendWeapons();
   }
 }
 
@@ -179,7 +179,7 @@ function connect() {
       socket?.send(JSON.stringify({ type: 'hello' }));
     } catch {}
     await sendInventory();
-    await sendItems();
+    await sendWeapons();
   };
 
   socket.onmessage = handleMessage;
