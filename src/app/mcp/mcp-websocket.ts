@@ -13,7 +13,12 @@ import { getStore } from 'app/inventory/stores-helpers';
 import { D1_StatHashes } from 'app/search/d1-known-values';
 import store from 'app/store/store';
 import { getItemKillTrackerInfo, isKillTrackerSocket } from 'app/utils/item-utils';
-import { countEnhancedPerks, getSocketsByIndexes, getWeaponSockets } from 'app/utils/socket-utils';
+import {
+  countEnhancedPerks,
+  getSocketsByIndexes,
+  getWeaponSockets,
+  isEnhancedPerk,
+} from 'app/utils/socket-utils';
 import { StatHashes } from 'data/d2/generated-enums';
 
 const MCP_PORT = 9130;
@@ -61,11 +66,16 @@ function buildWeaponPerkColumns(item: DimItem): string[][] {
   return getSocketsByIndexes(item.sockets, perks.socketIndexes)
     .filter((socket) => !isKillTrackerSocket(socket))
     .map((socket) =>
-      socket.plugOptions.map((p) =>
-        socket.plugged?.plugDef.hash === p.plugDef.hash
-          ? `${p.plugDef.displayProperties.name}*`
-          : p.plugDef.displayProperties.name,
-      ),
+      socket.plugOptions.map((p) => {
+        let name = p.plugDef.displayProperties.name;
+        if (isEnhancedPerk(p.plugDef)) {
+          name += ' (Enhanced)';
+        }
+        if (socket.plugged?.plugDef.hash === p.plugDef.hash) {
+          name += '*';
+        }
+        return name;
+      }),
     );
 }
 
