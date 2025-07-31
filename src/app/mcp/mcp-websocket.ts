@@ -93,7 +93,6 @@ function buildWeaponSummary(
     craftedLevel: item.craftedInfo?.level,
     killTracker: getItemKillTrackerInfo(item)?.count,
     masterworkType: getMasterworkStatNames(item.masterworkInfo),
-    masterwork: item.masterwork,
     masterworkTier: item.masterworkInfo?.tier,
   };
 }
