@@ -13,12 +13,7 @@ import { getStore } from 'app/inventory/stores-helpers';
 import { D1_StatHashes } from 'app/search/d1-known-values';
 import store from 'app/store/store';
 import { getItemKillTrackerInfo, isKillTrackerSocket } from 'app/utils/item-utils';
-import {
-  countEnhancedPerks,
-  getSocketsByIndexes,
-  getWeaponSockets,
-  isEnhancedPerk,
-} from 'app/utils/socket-utils';
+import { getSocketsByIndexes, getWeaponSockets, isEnhancedPerk } from 'app/utils/socket-utils';
 import { StatHashes } from 'data/d2/generated-enums';
 
 const MCP_PORT = 9130;
@@ -90,7 +85,6 @@ function buildWeaponSummary(
   return {
     ...base,
     perks: buildWeaponPerkColumns(item),
-    enhancedPerks: item.sockets ? countEnhancedPerks(item.sockets) : 0,
     craftedLevel: item.craftedInfo?.level,
     killTracker: getItemKillTrackerInfo(item)?.count,
   };
@@ -107,7 +101,6 @@ function buildArmorSummary(
   return {
     ...base,
     mods: buildSocketNames(item),
-    enhancedPerks: item.sockets ? countEnhancedPerks(item.sockets) : 0,
   };
 }
 
