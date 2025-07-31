@@ -58,15 +58,15 @@ function buildWeaponPerkColumns(item: DimItem): string[][] {
     return [];
   }
 
-  return getSocketsByIndexes(item.sockets, perks.socketIndexes).map((socket) =>
-    isKillTrackerSocket(socket)
-      ? [socket.plugged?.plugDef.displayProperties.name ?? '']
-      : socket.plugOptions.map((p) =>
-          socket.plugged?.plugDef.hash === p.plugDef.hash
-            ? `${p.plugDef.displayProperties.name}*`
-            : p.plugDef.displayProperties.name,
-        ),
-  );
+  return getSocketsByIndexes(item.sockets, perks.socketIndexes)
+    .filter((socket) => !isKillTrackerSocket(socket))
+    .map((socket) =>
+      socket.plugOptions.map((p) =>
+        socket.plugged?.plugDef.hash === p.plugDef.hash
+          ? `${p.plugDef.displayProperties.name}*`
+          : p.plugDef.displayProperties.name,
+      ),
+    );
 }
 
 function buildWeaponSummary(
