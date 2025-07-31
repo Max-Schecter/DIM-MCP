@@ -1,166 +1,204 @@
 /* eslint-disable no-console */
-import { DimItem } from 'app/inventory/item-types';
-import { storesSelector } from 'app/inventory/selectors';
-import { store } from 'app/store/store';
+import type { TagValue } from 'app/inventory/dim-item-info';
+import type { DimItem } from 'app/inventory/item-types';
 import {
-  getDisplayedItemSockets,
-  getSocketsByIndexes,
-  isKillTrackerSocket,
-} from 'app/utils/socket-utils';
+  allItemsSelector,
+  getNotesSelector,
+  getTagSelector,
+  storesSelector,
+} from 'app/inventory/selectors';
+import {
+  buildSocketNames,
+  buildSocketNamesByColumn,
+  csvStatNamesForDestinyVersion,
+} from 'app/inventory/spreadsheets';
+import type { DimStore } from 'app/inventory/store-types';
+import { getStore } from 'app/inventory/stores-helpers';
+import store from 'app/store/store';
+import { getItemKillTrackerInfo } from 'app/utils/item-utils';
+import { countEnhancedPerks } from 'app/utils/socket-utils';
 
-const socket = new WebSocket('ws://localhost:8765');
+const MCP_PORT = 9130;
+const MCP_URL = `wss://localhost:${MCP_PORT}`;
+let socket: WebSocket | null = null;
+let sending = false;
 
-socket.addEventListener('open', () => {
-  console.log('MCP: WebSocket connection opened, preparing data...');
-  sendInventory();
-});
-
-function sendInventory() {
-  const state = store.getState();
-  const stores = storesSelector(state);
-  if (!stores.length) {
-    console.log('MCP: Inventory not loaded yet, retrying in 1s...');
-    setTimeout(sendInventory, 1000);
-    return;
-  }
-
-  let allItems: DimItem[] = [];
-  for (const dimStore of stores) {
-    const gearItems = dimStore.items.filter((i) => i.bucket.inWeapons || i.bucket.inArmor);
-    allItems = allItems.concat(gearItems);
-  }
-
-  const itemsData = allItems.map((item) => buildItemData(item));
-  socket.send(JSON.stringify(itemsData));
-  console.log(`MCP: Sent ${itemsData.length} item entries to the server.`);
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
-function buildItemData(item: DimItem) {
-  const itemObj: any = {
+function buildItemSummary(
+  item: DimItem,
+  getTag: (item: DimItem) => TagValue | undefined,
+  getNotes: (item: DimItem) => string | undefined,
+  statNames: Map<number, string>,
+  stores: readonly DimStore[],
+) {
+  const stats: Record<string, number> = {};
+  for (const stat of item.stats ?? []) {
+    const name = statNames.get(stat.statHash) ?? stat.displayProperties.name;
+    stats[name] = stat.value;
+  }
+
+  const store = getStore(stores, item.owner);
+  const killTracker = getItemKillTrackerInfo(item);
+
+  return {
+    id: item.id,
+    hash: item.hash,
     name: item.name,
     type: item.typeName,
-    class:
-      item.classTypeNameLocalized?.toLowerCase() === 'unknown'
-        ? 'Any'
-        : item.classTypeNameLocalized,
-    rarity: item.rarity,
+    tier: item.tier,
+    bucketHash: item.bucket.hash,
+    bucketName: item.bucket.name,
+    classType: item.classTypeNameLocalized,
+    equipped: item.equipped,
+    exotic: item.isExotic,
+    element: item.element?.displayProperties.name,
+    power: item.power,
+    stats,
+    perks: buildSocketNames(item),
+    perkColumns: buildSocketNamesByColumn(item),
+    owner: store?.name ?? item.owner,
+    enhancedPerks: item.sockets ? countEnhancedPerks(item.sockets) : 0,
+    craftedLevel: item.craftedInfo?.level,
+    killTracker: killTracker?.count,
+    tag: getTag(item),
+    notes: getNotes(item),
   };
-
-  if (item.power !== undefined) {
-    itemObj.power = item.power;
-  } else if (item.primaryStat) {
-    itemObj.power = item.primaryStat.value;
-  }
-
-  if (item.element) {
-    itemObj.element = item.element.displayProperties.name;
-  }
-
-  if (item.stats) {
-    const stats: Record<string, number> = {};
-    for (const stat of item.stats) {
-      stats[stat.displayProperties.name] = stat.value;
-    }
-    itemObj.stats = stats;
-  }
-
-  if (item.energy) {
-    const energyTypeMap: Record<number, string> = {
-      1: 'Arc',
-      2: 'Solar',
-      3: 'Void',
-      6: 'Stasis',
-    };
-    const { energyType, energyCapacity } = item.energy;
-    itemObj.energy = {
-      type: energyTypeMap[energyType] || 'Any',
-      capacity: energyCapacity,
-    };
-  }
-
-  const sockets = getDisplayedItemSockets(item, true);
-  const perksByColumn: string[][] = [];
-  const socketCategories: Record<string, string[]> = {};
-
-  if (sockets) {
-    const { intrinsicSocket, perks, modSocketsByCategory } = sockets;
-
-    if (intrinsicSocket) {
-      if (
-        isKillTrackerSocket(intrinsicSocket) &&
-        intrinsicSocket.plugged?.plugDef.displayProperties.name
-      ) {
-        perksByColumn.push([intrinsicSocket.plugged.plugDef.displayProperties.name]);
-      } else {
-        const names = intrinsicSocket.plugOptions.map((p) => {
-          const name = p.plugDef.displayProperties.name;
-          return intrinsicSocket.plugged?.plugDef.hash === p.plugDef.hash ? `${name}*` : name;
-        });
-        perksByColumn.push(names);
-      }
-    }
-
-    if (perks) {
-      const perkSockets = getSocketsByIndexes(item.sockets!, perks.socketIndexes);
-      for (const socket of perkSockets) {
-        if (isKillTrackerSocket(socket) && socket.plugged?.plugDef.displayProperties.name) {
-          perksByColumn.push([socket.plugged.plugDef.displayProperties.name]);
-        } else {
-          const names = socket.plugOptions.map((p) => {
-            const name = p.plugDef.displayProperties.name;
-            return socket.plugged?.plugDef.hash === p.plugDef.hash ? `${name}*` : name;
-          });
-          perksByColumn.push(names);
-        }
-      }
-    }
-
-    for (const [category, socketList] of modSocketsByCategory) {
-      const categoryName = category.category.displayProperties.name;
-      const names: string[] = [];
-      for (const socket of socketList) {
-        if (isKillTrackerSocket(socket) && socket.plugged?.plugDef.displayProperties.name) {
-          names.push(socket.plugged.plugDef.displayProperties.name);
-        } else {
-          for (const p of socket.plugOptions) {
-            const name = p.plugDef.displayProperties.name;
-            names.push(socket.plugged?.plugDef.hash === p.plugDef.hash ? `${name}*` : name);
-          }
-        }
-      }
-      if (names.length) {
-        socketCategories[categoryName] = names;
-      }
-    }
-  }
-
-  if (perksByColumn.length) {
-    itemObj.perksByColumn = perksByColumn;
-  }
-  if (Object.keys(socketCategories).length) {
-    itemObj.socketCategories = socketCategories;
-  }
-
-  if (item.masterworkInfo) {
-    const mw = item.masterworkInfo;
-    const mwObj: any = { tier: mw.tier };
-    if (mw.stats?.length) {
-      mwObj.stats = mw.stats.map((s) => ({ name: s.name, value: s.value }));
-    }
-    itemObj.masterwork = mwObj;
-  }
-
-  return itemObj;
 }
 
-socket.addEventListener('error', (evt) => {
-  console.error('MCP: WebSocket error', evt);
-});
+async function sendItems() {
+  const state = store.getState();
+  const allItems = allItemsSelector(state);
+  const getTag = getTagSelector(state);
+  const getNotes = getNotesSelector(state);
+  const destinyVersion = allItems[0]?.destinyVersion ?? 2;
+  const statNames = csvStatNamesForDestinyVersion(destinyVersion);
+  const stores = storesSelector(state);
 
-socket.addEventListener('close', () => {
-  console.log('MCP: WebSocket connection closed.');
-});
+  const items = allItems
+    .filter((item) => item.bucket.inWeapons || item.bucket.inArmor)
+    .map((item) => buildItemSummary(item, getTag, getNotes, statNames, stores));
+
+  if (socket?.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({ type: 'items', data: items }));
+  }
+}
+
+async function sendInventory() {
+  if (sending) {
+    console.log('🔄 Skipping sendInventory — already in progress');
+    return;
+  }
+  sending = true;
+  console.log('🚀 Sending inventory data (per-store streaming)...');
+
+  const state = store.getState();
+  const stores = storesSelector(state);
+  const currencies = state.inventory.currencies;
+
+  try {
+    // 1) Tell server how many stores to expect
+    socket?.send(JSON.stringify({ type: 'inventoryStart', storeCount: stores.length }));
+    await sleep(10);
+
+    // 2) Send currencies separately (small)
+    socket?.send(JSON.stringify({ type: 'currencies', data: currencies }));
+    await sleep(10);
+
+    // 3) Send each store as its own chunked blob
+    const CHUNK_SIZE = 2 * 1024 * 1024; // 2 MB
+
+    for (let i = 0; i < stores.length; i++) {
+      const store = stores[i];
+      const seen = new WeakSet<object>();
+      const sjson = JSON.stringify(store, function (_: any, value: any) {
+        if (typeof value === 'object' && value !== null) {
+          if (seen.has(value as object)) {
+            return '[Circular]';
+          }
+          seen.add(value as object);
+        }
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+        return value;
+      });
+
+      const totalChunks = Math.ceil(sjson.length / CHUNK_SIZE) || 1;
+      for (let c = 0; c < totalChunks; c++) {
+        const chunk = sjson.slice(c * CHUNK_SIZE, (c + 1) * CHUNK_SIZE);
+        const message = JSON.stringify({
+          type: 'storeChunk',
+          storeIndex: i,
+          chunkIndex: c,
+          totalChunks,
+          data: chunk,
+        });
+        if (socket?.readyState === WebSocket.OPEN) {
+          socket.send(message);
+          await sleep(20); // throttle a bit to avoid buffer backpressure
+        }
+      }
+      console.log(`📤 Store ${i} sent in ${Math.ceil(sjson.length / CHUNK_SIZE) || 1} chunks`);
+      await sleep(30);
+    }
+
+    console.log('✅ All stores sent');
+  } catch (err) {
+    console.error('❌ sendInventory failed:', err);
+  } finally {
+    sending = false;
+  }
+}
+
+function handleMessage(event: MessageEvent) {
+  let message: any = null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    message = JSON.parse(String(event.data));
+  } catch {
+    if (event.data === 'ping') {
+      sendInventory();
+      sendItems();
+      return;
+    }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+  if (message && message.type === 'ping') {
+    sendInventory();
+    sendItems();
+  }
+}
+
+function connect() {
+  socket = new WebSocket(MCP_URL);
+
+  socket.onopen = async () => {
+    console.log('MCP WebSocket connected');
+    try {
+      socket?.send(JSON.stringify({ type: 'hello' }));
+    } catch {}
+    await sendInventory();
+    await sendItems();
+  };
+
+  socket.onmessage = handleMessage;
+
+  socket.onerror = (err) => {
+    console.error('MCP WebSocket error', err);
+    try {
+      socket?.close();
+    } catch {}
+  };
+
+  socket.onclose = () => {
+    console.warn('MCP WebSocket closed, retrying in 3s');
+    setTimeout(connect, 3000);
+  };
+}
 
 export function startMcpSocket() {
-  // intentional noop - socket connection starts on import
+  if (!socket || socket.readyState === WebSocket.CLOSED) {
+    connect();
+  }
 }
