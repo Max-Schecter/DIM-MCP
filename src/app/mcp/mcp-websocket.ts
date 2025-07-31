@@ -88,6 +88,8 @@ function buildWeaponSummary(
     perks: buildWeaponPerkColumns(item),
     craftedLevel: item.craftedInfo?.level,
     killTracker: getItemKillTrackerInfo(item)?.count,
+    masterwork: item.masterwork,
+    masterworkTier: item.masterworkInfo?.tier,
   };
 }
 
