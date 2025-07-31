@@ -25,7 +25,7 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function buildWeaponSummary(
+function buildBaseItemSummary(
   item: DimItem,
   getTag: (item: DimItem) => TagValue | undefined,
   getNotes: (item: DimItem) => string | undefined,
@@ -39,7 +39,6 @@ function buildWeaponSummary(
   }
 
   const store = getStore(stores, item.owner);
-  const killTracker = getItemKillTrackerInfo(item);
 
   return {
     name: item.name,
@@ -48,13 +47,41 @@ function buildWeaponSummary(
     element: item.element?.displayProperties.name,
     power: item.power,
     stats,
-    perks: buildSocketNames(item),
     owner: store?.name ?? item.owner,
-    enhancedPerks: item.sockets ? countEnhancedPerks(item.sockets) : 0,
-    craftedLevel: item.craftedInfo?.level,
-    killTracker: killTracker?.count,
     tag: getTag(item),
     notes: getNotes(item),
+  };
+}
+
+function buildWeaponSummary(
+  item: DimItem,
+  getTag: (item: DimItem) => TagValue | undefined,
+  getNotes: (item: DimItem) => string | undefined,
+  statNames: Map<number, string>,
+  stores: readonly DimStore[],
+) {
+  const base = buildBaseItemSummary(item, getTag, getNotes, statNames, stores);
+  return {
+    ...base,
+    perks: buildSocketNames(item),
+    enhancedPerks: item.sockets ? countEnhancedPerks(item.sockets) : 0,
+    craftedLevel: item.craftedInfo?.level,
+    killTracker: getItemKillTrackerInfo(item)?.count,
+  };
+}
+
+function buildArmorSummary(
+  item: DimItem,
+  getTag: (item: DimItem) => TagValue | undefined,
+  getNotes: (item: DimItem) => string | undefined,
+  statNames: Map<number, string>,
+  stores: readonly DimStore[],
+) {
+  const base = buildBaseItemSummary(item, getTag, getNotes, statNames, stores);
+  return {
+    ...base,
+    mods: buildSocketNames(item),
+    enhancedPerks: item.sockets ? countEnhancedPerks(item.sockets) : 0,
   };
 }
 
@@ -78,6 +105,24 @@ async function sendWeapons() {
 
   if (socket?.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify({ type: 'weapons', data: weapons }));
+  }
+}
+
+async function sendArmor() {
+  const state = store.getState();
+  const allItems = allItemsSelector(state);
+  const getTag = getTagSelector(state);
+  const getNotes = getNotesSelector(state);
+  const destinyVersion = allItems[0]?.destinyVersion ?? 2;
+  const statNames = csvStatNamesForDestinyVersion(destinyVersion);
+  const stores = storesSelector(state);
+
+  const armor = allItems
+    .filter((item) => item.bucket.inArmor)
+    .map((item) => buildArmorSummary(item, getTag, getNotes, statNames, stores));
+
+  if (socket?.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({ type: 'armor', data: armor }));
   }
 }
 
@@ -162,6 +207,7 @@ function handleMessage(event: MessageEvent) {
   if (message && message.type === 'ping') {
     sendInventory();
     sendWeapons();
+    sendArmor();
   }
 }
 
@@ -175,6 +221,7 @@ function connect() {
     } catch {}
     await sendInventory();
     await sendWeapons();
+    await sendArmor();
   };
 
   socket.onmessage = handleMessage;

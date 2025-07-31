@@ -25,6 +25,7 @@ async def handle_client(websocket):
         "stores_final": {},      # storeIndex -> parsed store object
         "currencies": None,
         "weapons": None,
+        "armor": None,
     }
     try:
         while True:
@@ -109,6 +110,7 @@ async def handle_client(websocket):
                         "stores_final": {},
                         "currencies": None,
                         "weapons": None,
+                        "armor": None,
                     }
                 continue
 
@@ -119,6 +121,15 @@ async def handle_client(websocket):
                     json.dump(state["weapons"], f, indent=2)
                 logger.info(f"📁 Saved weapons summary to: {weapons_output_path}")
                 logger.info("🗃️ Weapons summary received")
+                continue
+
+            if mtype == "armor":
+                state["armor"] = msg.get("data")
+                armor_output_path = Path.home() / "Desktop" / "dim_armor.json"
+                with open(armor_output_path, "w") as f:
+                    json.dump(state["armor"], f, indent=2)
+                logger.info(f"📁 Saved armor summary to: {armor_output_path}")
+                logger.info("🦺 Armor summary received")
                 continue
 
             # Optional: ack logging
