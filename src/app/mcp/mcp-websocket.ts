@@ -12,8 +12,8 @@ import type { DimStore } from 'app/inventory/store-types';
 import { getStore } from 'app/inventory/stores-helpers';
 import { D1_StatHashes } from 'app/search/d1-known-values';
 import store from 'app/store/store';
-import { getItemKillTrackerInfo } from 'app/utils/item-utils';
-import { countEnhancedPerks } from 'app/utils/socket-utils';
+import { getItemKillTrackerInfo, isKillTrackerSocket } from 'app/utils/item-utils';
+import { countEnhancedPerks, getSocketsByIndexes, getWeaponSockets } from 'app/utils/socket-utils';
 import { StatHashes } from 'data/d2/generated-enums';
 
 const MCP_PORT = 9130;
@@ -48,6 +48,27 @@ function buildBaseItemSummary(
   };
 }
 
+function buildWeaponPerkColumns(item: DimItem): string[][] {
+  if (!item.sockets) {
+    return [];
+  }
+
+  const { perks } = getWeaponSockets(item, { excludeEmptySockets: true }) ?? {};
+  if (!perks) {
+    return [];
+  }
+
+  return getSocketsByIndexes(item.sockets, perks.socketIndexes).map((socket) =>
+    isKillTrackerSocket(socket)
+      ? [socket.plugged?.plugDef.displayProperties.name ?? '']
+      : socket.plugOptions.map((p) =>
+          socket.plugged?.plugDef.hash === p.plugDef.hash
+            ? `${p.plugDef.displayProperties.name}*`
+            : p.plugDef.displayProperties.name,
+        ),
+  );
+}
+
 function buildWeaponSummary(
   item: DimItem,
   getTag: (item: DimItem) => TagValue | undefined,
@@ -58,7 +79,7 @@ function buildWeaponSummary(
   const base = buildBaseItemSummary(item, getTag, getNotes, statNames, stores);
   return {
     ...base,
-    perks: buildSocketNames(item),
+    perks: buildWeaponPerkColumns(item),
     enhancedPerks: item.sockets ? countEnhancedPerks(item.sockets) : 0,
     craftedLevel: item.craftedInfo?.level,
     killTracker: getItemKillTrackerInfo(item)?.count,
