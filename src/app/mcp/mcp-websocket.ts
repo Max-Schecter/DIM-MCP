@@ -36,6 +36,7 @@ function buildBaseItemSummary(
   const store = getStore(stores, item.owner);
 
   return {
+    id: item.id,
     name: item.name,
     type: item.typeName,
     gearTier: item.tier,
