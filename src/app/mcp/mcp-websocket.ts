@@ -38,7 +38,7 @@ function buildBaseItemSummary(
   return {
     name: item.name,
     type: item.typeName,
-    tier: item.tier,
+    gearTier: item.tier,
     element: item.element?.displayProperties.name,
     power: item.power,
     stats,
