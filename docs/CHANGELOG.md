@@ -6,6 +6,7 @@
 * Support mid-season season pass track change.
 * Added a persistent MCP WebSocket client for local integrations.
 * WebSocket now streams a concise weapon summary with perk rolls for AI tools.
+* WebSocket weapon summaries include masterwork info.
 
 ## 8.83.0 <span class="changelog-date">(2025-07-27)</span>
 
