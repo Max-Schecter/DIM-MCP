@@ -7,7 +7,11 @@ import {
   getTagSelector,
   storesSelector,
 } from 'app/inventory/selectors';
-import { buildSocketNames, csvStatNamesForDestinyVersion } from 'app/inventory/spreadsheets';
+import {
+  buildSocketNames,
+  buildSocketNamesByColumn,
+  csvStatNamesForDestinyVersion,
+} from 'app/inventory/spreadsheets';
 import type { DimStore } from 'app/inventory/store-types';
 import { getStore } from 'app/inventory/stores-helpers';
 import { D1_StatHashes } from 'app/search/d1-known-values';
@@ -49,6 +53,7 @@ function buildWeaponSummary(
     power: item.power,
     stats,
     perks: buildSocketNames(item),
+    perkColumns: buildSocketNamesByColumn(item),
     owner: store?.name ?? item.owner,
     enhancedPerks: item.sockets ? countEnhancedPerks(item.sockets) : 0,
     craftedLevel: item.craftedInfo?.level,

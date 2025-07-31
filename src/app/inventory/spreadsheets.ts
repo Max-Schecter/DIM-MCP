@@ -14,13 +14,17 @@ import { CsvRow, downloadCsv } from 'app/utils/csv';
 import { DimError } from 'app/utils/dim-error';
 import { localizedSorter } from 'app/utils/intl';
 import { isKillTrackerSocket } from 'app/utils/item-utils';
-import { getDisplayedItemSockets, getSocketsByIndexes } from 'app/utils/socket-utils';
+import {
+  getDisplayedItemSockets,
+  getSocketByIndex,
+  getSocketsByIndexes,
+} from 'app/utils/socket-utils';
 import { DestinyClass } from 'bungie-api-ts/destiny2';
 import { BucketHashes, StatHashes } from 'data/d2/generated-enums';
 import Papa from 'papaparse';
 import { setItemNote, setItemTagsBulk } from './actions';
 import { TagValue, tagConfig } from './dim-item-info';
-import { D1GridNode, DimItem } from './item-types';
+import { D1GridNode, DimItem, DimSocket } from './item-types';
 import { getNotesSelector, getTagSelector, storesSelector } from './selectors';
 import { DimStore } from './store-types';
 
@@ -362,6 +366,29 @@ export function buildSocketNames(item: DimItem): string[] {
   );
 
   return socketItems.flat();
+}
+
+export function buildSocketNamesByColumn(item: DimItem): string[][] {
+  if (!item.sockets) {
+    return [];
+  }
+
+  const { perks } = getDisplayedItemSockets(item, /* excludeEmptySockets */ true)!;
+
+  if (!perks) {
+    return [];
+  }
+
+  return perks.socketIndexes
+    .map((socketIndex) => getSocketByIndex(item.sockets!, socketIndex))
+    .filter((s): s is DimSocket => Boolean(s))
+    .map((socket) =>
+      socket.plugOptions.map((p) =>
+        socket.plugged?.plugDef.hash === p.plugDef.hash
+          ? `${p.plugDef.displayProperties.name}*`
+          : p.plugDef.displayProperties.name,
+      ),
+    );
 }
 
 export function buildNodeNames(nodes: D1GridNode[]): string[] {
