@@ -12,30 +12,11 @@ logger = logging.getLogger(__name__)
 PORT = 9130
 CERT_PATH = "/Users/maxschecter/Desktop/DIM-MCP/cert.pem"
 KEY_PATH = "/Users/maxschecter/Desktop/DIM-MCP/key.pem"
-OUTPUT_PATH = Path.home() / "Desktop" / "dim_inventory.json"
-
-aSYNC_MARKER = object()
 
 async def handle_client(websocket):
     logger.info(f"✅ DIM connected from: {websocket.remote_address}")
-    # Buffer structure for new protocol
-    state = {
-        "stores_expected": None,
-        "stores_received": {},   # storeIndex -> {chunks: dict, total: int}
-        "stores_final": {},      # storeIndex -> parsed store object
-        "currencies": None,
-        "weapons": None,
-        "armor": None,
-    }
     try:
-        while True:
-            try:
-                message = await asyncio.wait_for(websocket.recv(), timeout=180)
-            except asyncio.TimeoutError:
-                logger.warning("⏱️ No message from DIM within timeout window; closing")
-                break
-
-            # Parse JSON
+        async for message in websocket:
             try:
                 msg = json.loads(message)
             except json.JSONDecodeError:
@@ -47,92 +28,28 @@ async def handle_client(websocket):
 
             mtype = msg.get("type")
 
-            # Client hello (no reply needed)
             if mtype == "hello":
-                logger.info("👋 Client said hello; waiting for start...")
-                continue
-
-            # Start: tells us how many stores to expect
-            if mtype == "inventoryStart":
-                state["stores_expected"] = int(msg.get("storeCount", 0))
-                logger.info(f"🟢 Start: expecting {state['stores_expected']} stores")
-                continue
-
-            # Currencies payload
-            if mtype == "currencies":
-                state["currencies"] = msg.get("data")
-                logger.info("💰 Currencies received")
-                continue
-
-            # Per-store chunk
-            if mtype == "storeChunk":
-                idx = int(msg["storeIndex"])  # zero-based
-                total = int(msg["totalChunks"])
-                chunk_idx = int(msg["chunkIndex"])
-                data = msg["data"]
-
-                buf = state["stores_received"].setdefault(idx, {"chunks": {}, "total": total})
-                buf["chunks"][chunk_idx] = data
-                buf["total"] = total  # keep latest total
-                logger.info(f"📦 Store {idx}: received chunk {chunk_idx+1}/{total}")
-
-                # If this store is complete, parse & stash
-                if len(buf["chunks"]) == buf["total"]:
-                    ordered = [buf["chunks"][i] for i in range(buf["total"])]
-                    s_json = "".join(ordered)
-                    try:
-                        store_obj = json.loads(s_json)
-                        state["stores_final"][idx] = store_obj
-                        logger.info(f"✅ Store {idx} assembled")
-                    except json.JSONDecodeError:
-                        logger.error(f"❌ Failed to decode store {idx} JSON; discarding")
-                        state["stores_received"].pop(idx, None)
-                        continue
-
-                # If all stores done, write final file
-                expected = state["stores_expected"]
-                if expected is not None and len(state["stores_final"]) == expected:
-                    stores_ordered = [state["stores_final"][i] for i in range(expected)]
-                    payload = {
-                        "stores": stores_ordered,
-                        "currencies": state["currencies"],
-                        "weapons": state["weapons"],
-                    }
-                    with open(OUTPUT_PATH, "w") as f:
-                        json.dump(payload, f, indent=2)
-                    logger.info(f"📁 Saved full inventory with {expected} stores to: {OUTPUT_PATH}")
-                    # Optionally ack
-                    await websocket.send(json.dumps({"type": "ack", "stores": expected}))
-                    # Reset to allow another cycle if needed
-                    state = {
-                        "stores_expected": None,
-                        "stores_received": {},
-                        "stores_final": {},
-                        "currencies": None,
-                        "weapons": None,
-                        "armor": None,
-                    }
+                logger.info("👋 Client said hello")
                 continue
 
             if mtype == "weapons":
-                state["weapons"] = msg.get("data")
+                weapons = msg.get("data")
                 weapons_output_path = Path.home() / "Desktop" / "dim_weapons.json"
                 with open(weapons_output_path, "w") as f:
-                    json.dump(state["weapons"], f, indent=2)
+                    json.dump(weapons, f, indent=2)
                 logger.info(f"📁 Saved weapons summary to: {weapons_output_path}")
                 logger.info("🗃️ Weapons summary received")
                 continue
 
             if mtype == "armor":
-                state["armor"] = msg.get("data")
+                armor = msg.get("data")
                 armor_output_path = Path.home() / "Desktop" / "dim_armor.json"
                 with open(armor_output_path, "w") as f:
-                    json.dump(state["armor"], f, indent=2)
+                    json.dump(armor, f, indent=2)
                 logger.info(f"📁 Saved armor summary to: {armor_output_path}")
                 logger.info("🦺 Armor summary received")
                 continue
 
-            # Optional: ack logging
             if mtype == "pong":
                 logger.info("🔁 Received pong from client")
                 continue
