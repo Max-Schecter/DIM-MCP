@@ -12,7 +12,11 @@ import type { DimStore } from 'app/inventory/store-types';
 import { getStore } from 'app/inventory/stores-helpers';
 import { D1_StatHashes } from 'app/search/d1-known-values';
 import store from 'app/store/store';
-import { getItemKillTrackerInfo, isKillTrackerSocket } from 'app/utils/item-utils';
+import {
+  getItemKillTrackerInfo,
+  getMasterworkStatNames,
+  isKillTrackerSocket,
+} from 'app/utils/item-utils';
 import { getSocketsByIndexes, getWeaponSockets, isEnhancedPerk } from 'app/utils/socket-utils';
 import { StatHashes } from 'data/d2/generated-enums';
 
@@ -88,6 +92,7 @@ function buildWeaponSummary(
     perks: buildWeaponPerkColumns(item),
     craftedLevel: item.craftedInfo?.level,
     killTracker: getItemKillTrackerInfo(item)?.count,
+    masterworkType: getMasterworkStatNames(item.masterworkInfo),
     masterwork: item.masterwork,
     masterworkTier: item.masterworkInfo?.tier,
   };
