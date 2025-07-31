@@ -68,7 +68,7 @@ function buildWeaponPerkColumns(item: DimItem): string[][] {
           name += ' (Enhanced)';
         }
         if (socket.plugged?.plugDef.hash === p.plugDef.hash) {
-          name += ' (equipped)';
+          name += ' (Equipped)';
         }
         return name;
       }),
