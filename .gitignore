@@ -23,4 +23,5 @@ eslint.results.json
 .pnpm-store
 /sonda-report.html
 sonda-report/
-.claude/
+.claude/__pycache__/
+__pycache__/
