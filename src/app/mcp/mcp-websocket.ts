@@ -111,7 +111,7 @@ function buildArmorSummary(
   };
 }
 
-async function sendWeapons() {
+async function sendInventory() {
   const state = store.getState();
   const allItems = allItemsSelector(state);
   const getTag = getTagSelector(state);
@@ -129,26 +129,18 @@ async function sendWeapons() {
     )
     .map((item) => buildWeaponSummary(item, getTag, getNotes, statNames, stores));
 
-  if (socket?.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify({ type: 'weapons', data: weapons }));
-  }
-}
-
-async function sendArmor() {
-  const state = store.getState();
-  const allItems = allItemsSelector(state);
-  const getTag = getTagSelector(state);
-  const getNotes = getNotesSelector(state);
-  const destinyVersion = allItems[0]?.destinyVersion ?? 2;
-  const statNames = csvStatNamesForDestinyVersion(destinyVersion);
-  const stores = storesSelector(state);
-
   const armor = allItems
     .filter((item) => item.bucket.inArmor)
     .map((item) => buildArmorSummary(item, getTag, getNotes, statNames, stores));
 
   if (socket?.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify({ type: 'armor', data: armor }));
+    socket.send(
+      JSON.stringify({
+        type: 'pong',
+        weapons: { type: 'weapons', data: weapons },
+        armor: { type: 'armor', data: armor },
+      }),
+    );
   }
 }
 
@@ -159,15 +151,13 @@ function handleMessage(event: MessageEvent) {
     message = JSON.parse(String(event.data));
   } catch {
     if (event.data === 'ping') {
-      sendWeapons();
-      sendArmor();
+      sendInventory();
       return;
     }
   }
   // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   if (message && message.type === 'ping') {
-    sendWeapons();
-    sendArmor();
+    sendInventory();
   }
 }
 
@@ -179,8 +169,7 @@ function connect() {
     try {
       socket?.send(JSON.stringify({ type: 'hello' }));
     } catch {}
-    await sendWeapons();
-    await sendArmor();
+    await sendInventory();
   };
 
   socket.onmessage = handleMessage;
