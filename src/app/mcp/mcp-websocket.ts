@@ -169,7 +169,6 @@ function connect() {
     try {
       socket?.send(JSON.stringify({ type: 'hello' }));
     } catch {}
-    await sendInventory();
   };
 
   socket.onmessage = handleMessage;

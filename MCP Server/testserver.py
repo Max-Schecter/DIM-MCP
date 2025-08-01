@@ -14,26 +14,14 @@ async def handle_user_input():
             try:
                 print("[DEBUG] Calling request_inventory...")
                 response = await request_inventory()
-                print(f"[DEBUG] Inventory response: {response}")
-                print("Inventory Response:", response)
+                from pathlib import Path
+                output_path = Path.home() / "Desktop" / "dim_inventory_response.json"
+                with open(output_path, "w") as f:
+                    json.dump(response, f, indent=2)
+                print(f"[DEBUG] Inventory response saved to: {output_path}")
             except Exception as e:
                 print(f"[ERROR] Failed to request inventory: {e}")
 
-
-
-def getWeaponsSummary():
-    weapons = []
-    # Logic to populate weapons array
-    # Example:
-    # weapons.append({"name": "Sword", "damage": 10})
-    return weapons
-
-def getArmorSummary():
-    armor = []
-    # Logic to populate armor array
-    # Example:
-    # armor.append({"name": "Shield", "defense": 5})
-    return armor
 
 async def handleMessage(message, websocket):
     # Assuming message is a dict and websocket is a WebSocket connection
