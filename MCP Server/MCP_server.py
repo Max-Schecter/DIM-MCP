@@ -1,68 +1,86 @@
-from fastmcp import FastMCP
-from typing import List, Union
-import subprocess, json, os, sys
+"""MCP server exposing inventory data via FastMCP tools.
+
+This module starts both the MCP server and the accompanying WebSocket
+server when executed directly. FastMCP will automatically install the
+listed dependencies before running the server.
+"""
+
+from __future__ import annotations
+
 import asyncio
-from websocket_server import request_inventory, main as start_websocket_server
+import contextlib
+from typing import List, Union
+
+from fastmcp import FastMCP
+
 from Data_Parsing import (
-    get_weapons_current_character,
-    get_armor_current_character,
-    get_weapons_all,
     get_armor_all,
+    get_armor_current_character,
     get_items_by_hash,
+    get_weapons_all,
+    get_weapons_current_character,
 )
+from websocket_server import request_inventory, main as start_websocket_server
+
+
+# FastMCP will ensure required packages are installed before start-up.
+mcp = FastMCP("Destiny Inventory Server", dependencies=["websockets"])
+
+
+@mcp.tool
+async def weapons_for_character(current_character: str) -> list[dict]:
+    """Return all weapon items owned by the given character."""
+
+    full_data = await request_inventory()
+    return get_weapons_current_character(full_data, current_character)
+
+
+@mcp.tool
+async def armor_for_character(current_character: str) -> list[dict]:
+    """Return all armor items owned by the given character."""
+
+    full_data = await request_inventory()
+    return get_armor_current_character(full_data, current_character)
+
+
+@mcp.tool
+async def weapons_all() -> list[dict]:
+    """Return stripped info for all weapons."""
+
+    full_data = await request_inventory()
+    return get_weapons_all(full_data)
+
+
+@mcp.tool
+async def armor_all() -> list[dict]:
+    """Return stripped info for all armor."""
+
+    full_data = await request_inventory()
+    return get_armor_all(full_data)
+
+
+@mcp.tool
+async def items_by_hashes(item_hashes: List[Union[int, str]]) -> list[dict]:
+    """Return items whose ID/hash matches any provided value."""
+
+    full_data = await request_inventory()
+    return get_items_by_hash(item_hashes, full_data)
+
+
+async def main() -> None:
+    """Run both the WebSocket server and the MCP server."""
+
+    websocket_task = asyncio.create_task(start_websocket_server())
+    try:
+        await mcp.run_async()
+    finally:
+        websocket_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await websocket_task
+
 
 if __name__ == "__main__":
-    # Create the MCP server object
-    mcp = FastMCP("Destiny Inventory Server")
-
-    @mcp.tool
-    def weapons_for_character(current_character: str) -> list[dict]:
-        """Return all weapon items owned by the given character. Input: current_character (e.g., 'Human Warlock'). Output: list of weapon dicts."""
-        full_data = request_inventory()
-        result = get_weapons_current_character(full_data, current_character)
-        return result
-
-    @mcp.tool
-    def armor_for_character(current_character: str) -> list[dict]:
-        """Return all armor items owned by the given character. Input: current_character. Output: list of armor dicts."""
-        full_data = request_inventory()
-        result = get_armor_current_character(full_data, current_character)
-        return result
-
-    @mcp.tool
-    def weapons_all() -> list[dict]:
-        """Return stripped info for all weapons. Output: list of weapon dicts with id/name/owner/gear_tier/type/element."""
-        full_data = request_inventory()
-        result = get_weapons_all(full_data)
-        return result
-
-    @mcp.tool
-    def armor_all() -> list[dict]:
-        """Return stripped info for all armor. Output: list of armor dicts with id/name/owner/gear_tier/type/stat_total."""
-        full_data = request_inventory()
-        result = get_armor_all(full_data)
-        return result
-
-    @mcp.tool
-    def items_by_hashes(item_hashes: List[Union[int, str]]) -> list[dict]:
-        """Return items whose id/hash matches any provided value. Input: item_hashes (ints/strings). Output: list of matching item dicts."""
-        full_data = request_inventory()
-        result = get_items_by_hash(item_hashes, full_data)
-        return result
-
-    # Start the websocket server in the background
-    async def start_websocket_background():
-        await start_websocket_server()
-
-    # Create and start the websocket server task
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    websocket_task = loop.create_task(start_websocket_background())
-
     try:
-        # Run the MCP server (this blocks)
-        mcp.run()
+        asyncio.run(main())
     except KeyboardInterrupt:
         print("\n👋 Shutting down...")
-        websocket_task.cancel()
-        loop.close()
