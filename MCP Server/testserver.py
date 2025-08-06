@@ -1,5 +1,4 @@
-from fastmcp import FastMCP
-import subprocess, json, os, sys
+import json
 import asyncio
 from websocket_server import request_inventory, main as start_websocket_server
 
@@ -21,16 +20,6 @@ async def handle_user_input():
                 print(f"[ERROR] Failed to request inventory: {e}")
 
 
-async def handleMessage(message, websocket):
-    # Assuming message is a dict and websocket is a WebSocket connection
-    if message.get('type') == 'ping':
-        weapons = getWeaponsSummary()
-        armor = getArmorSummary()
-        await websocket.send(json.dumps({
-            'type': 'pong',
-            'weapons': weapons,
-            'armor': armor
-        }))
 
 
 if __name__ == "__main__":
