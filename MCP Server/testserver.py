@@ -14,11 +14,9 @@ async def handle_user_input():
             try:
                 print("[DEBUG] Calling request_inventory...")
                 response = await request_inventory()
-                from pathlib import Path
-                output_path = Path.home() / "Desktop" / "dim_inventory_response.json"
-                with open(output_path, "w") as f:
-                    json.dump(response, f, indent=2)
-                print(f"[DEBUG] Inventory response saved to: {output_path}")
+                pretty_response = json.dumps(response, indent=2)
+                print("[DEBUG] Inventory response (pretty):")
+                print(pretty_response)
             except Exception as e:
                 print(f"[ERROR] Failed to request inventory: {e}")
 
