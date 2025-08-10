@@ -9,6 +9,7 @@ listed dependencies before running the server.
 
 import asyncio
 import contextlib
+import os
 from typing import List, Union
 
 from fastmcp import FastMCP
@@ -69,24 +70,38 @@ async def items_by_hashes(item_hashes: List[Union[int, str]]) -> str:
 
 async def main() -> None:
     """Run both the WebSocket server and the MCP server."""
-    
+
     print("🚀 Starting DIM MCP Server...")
     print(f"🔧 Working directory: {__file__}")
-    
+
     websocket_task = None
     mcp_task = None
-    
+
     try:
         print("📡 Starting websocket server...")
         websocket_task = asyncio.create_task(start_websocket_server(), name="websocket-server")
-        
+
         print("🤖 Starting MCP server...")
         mcp_task = asyncio.create_task(mcp.run_async(), name="mcp-server")
-        
+
+        # --- Orphan guard: exit if launcher disappears (PPID becomes 1) ---
+        async def _orphan_guard():
+            while True:
+                try:
+                    if os.getppid() == 1:
+                        # Fast, reliable exit to avoid zombies or relaunch loops
+                        os._exit(0)
+                    await asyncio.sleep(2)
+                except Exception:
+                    # If anything goes wrong, fail safe by exiting
+                    os._exit(0)
+        asyncio.create_task(_orphan_guard(), name="orphan-guard")
+        # -----------------------------------------------------------------
+
         # Run both tasks concurrently
         print("⚡ Running both servers concurrently...")
         await asyncio.gather(websocket_task, mcp_task, return_exceptions=True)
-        
+
     except KeyboardInterrupt:
         print("\n⚠️ Keyboard interrupt received, shutting down...")
     except Exception as e:
@@ -96,12 +111,12 @@ async def main() -> None:
     finally:
         # Cancel both tasks if one fails or we're shutting down
         print("🛑 Shutting down servers...")
-        
+
         if websocket_task and not websocket_task.done():
             websocket_task.cancel()
         if mcp_task and not mcp_task.done():
             mcp_task.cancel()
-        
+
         # Wait for tasks to cleanup gracefully
         if websocket_task:
             with contextlib.suppress(asyncio.CancelledError):
