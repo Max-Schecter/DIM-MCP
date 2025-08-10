@@ -93,7 +93,8 @@ async def handle_client(websocket, response_futures):
     except Exception as e:
         logger.error(f"🚨 WebSocket error: {e}")
 
-async def main():
+async def start_websocket_server():
+    """Start the WebSocket server and return the server coroutine."""
     ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE
@@ -103,16 +104,16 @@ async def main():
         logger.info("🔒 Using SSL certificates from DIM")
     except FileNotFoundError:
         logger.error("❌ SSL certificates not found. Run DIM to generate them.")
-        return
+        raise
     except Exception as e:
         logger.error(f"❌ SSL setup error: {e}")
-        return
+        raise
 
     logger.info(f"🚀 Secure WebSocket server started on wss://localhost:{PORT}")
     logger.info("Waiting for DIM to connect...\n")
 
     try:
-        async with websockets.serve(
+        server = await websockets.serve(
             lambda ws: handle_client(ws, response_futures),
             "localhost",
             PORT,
@@ -121,10 +122,20 @@ async def main():
             close_timeout=10,
             max_size=None,       # accept messages of any size (our chunks are ~2 MB)
             max_queue=64,        # buffer more frames if needed
-        ):
-            await asyncio.Future()  # Run forever
+        )
+        
+        # Keep the server running
+        await server.wait_closed()
     except Exception as e:
         logger.error(f"❌ Server failed to start: {e}")
+        raise
+
+async def main():
+    """Main function for running the WebSocket server standalone."""
+    try:
+        await start_websocket_server()
+    except KeyboardInterrupt:
+        logger.info("\n👋 Shutting down server...")
 
 
     weapons_path = Path.home() / "Desktop" / "dim_weapons.json"
