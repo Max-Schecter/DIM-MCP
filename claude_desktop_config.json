@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "destiny-inventory": {
+      "command": "python",
+      "args": ["/Users/maxschecter/Desktop/DIM-MCP/MCP Server/MCP_server.py"],
+      "cwd": "/Users/maxschecter/Desktop/DIM-MCP/MCP Server",
+      "env": {
+        "VIRTUAL_ENV": "/Users/maxschecter/Desktop/DIM-MCP/MCP Server/.venv",
+        "PATH": "/Users/maxschecter/Desktop/DIM-MCP/MCP Server/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+      }
+    }
+  }
+}

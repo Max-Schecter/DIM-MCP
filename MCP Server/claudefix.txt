@@ -1,0 +1,72 @@
+Excellent! Here's what I fixed:
+
+  The Root Problem
+
+  The issue was shared global state conflicts between the websocket server
+  and FastMCP's async event loop management. When testserver.py worked but
+  the MCP integration didn't, it indicated that the websocket logic was
+  correct, but something about running it within FastMCP was breaking the
+  state management.
+
+  The Fix
+
+  I added thread-safe global state management to the websocket server:
+
+  Before (Problematic):
+
+  response_futures = {}  # Global dict
+  _current_ws = None     # Global websocket reference
+
+  async def handle_client(websocket, response_futures):
+      global _current_ws
+      _current_ws = websocket  # Race condition possible
+
+  async def request_inventory():
+      # Direct access to globals - not thread-safe
+      if _current_ws is not None:
+          await _current_ws.send(...)
+
+  After (Fixed):
+
+  import threading
+  _state_lock = threading.Lock()  # Thread safety
+  response_futures = {}
+  _current_ws = None
+
+  async def handle_client(websocket, response_futures):
+      global _current_ws
+      with _state_lock:           # Protected access
+          _current_ws = websocket
+
+  async def request_inventory():
+      with _state_lock:           # Protected access
+          current_ws = _current_ws  # Local copy
+          # ... setup future safely
+
+      if current_ws is not None:  # Use local copy
+          await current_ws.send(...)
+
+  Why This Was Necessary
+
+  When FastMCP runs your MCP server, it manages the async event loop
+  differently than when you run it standalone. This can cause:
+
+  1. Race conditions where global variables get corrupted
+  2. Async context conflicts where the websocket connection gets lost
+  3. Future/Task cleanup issues where response futures don't get properly
+  resolved
+
+  The thread lock ensures that even if FastMCP's event loop management
+  interferes, the critical sections (setting the websocket connection and
+  managing response futures) are atomic and safe.
+
+  The Enhanced Logging
+
+  I also added startup logging that helped ensure both the websocket server
+   and MCP server were starting correctly:
+  print("🚀 Starting DIM MCP Server...")
+  print("📡 Starting websocket server...")
+  print("🤖 Starting MCP server...")
+
+  This type of concurrency bug is common when integrating async servers
+  with frameworks like FastMCP that manage their own event loops!

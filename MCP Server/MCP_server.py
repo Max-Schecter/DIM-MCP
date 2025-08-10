@@ -1,11 +1,11 @@
+from __future__ import annotations
+
 """MCP server exposing inventory data via FastMCP tools.
 
 This module starts both the MCP server and the accompanying WebSocket
 server when executed directly. FastMCP will automatically install the
 listed dependencies before running the server.
 """
-
-from __future__ import annotations
 
 import asyncio
 import contextlib
@@ -28,19 +28,19 @@ mcp = FastMCP("Destiny Inventory Server", dependencies=["websockets"])
 
 
 @mcp.tool
-async def weapons_for_character(current_character: str) -> list[dict]:
+async def weapons_for_character() -> list[dict]:
     """Return all weapon items owned by the given character."""
 
     full_data = await request_inventory()
-    return get_weapons_current_character(full_data, current_character)
+    return get_weapons_current_character(full_data, "Human Warlock")
 
 
 @mcp.tool
-async def armor_for_character(current_character: str) -> list[dict]:
+async def armor_for_character()-> list[dict]:
     """Return all armor items owned by the given character."""
 
     full_data = await request_inventory()
-    return get_armor_current_character(full_data, current_character)
+    return get_armor_current_character(full_data, "Human Warlock")
 
 
 @mcp.tool
@@ -69,14 +69,35 @@ async def items_by_hashes(item_hashes: List[Union[int, str]]) -> list[dict]:
 
 async def main() -> None:
     """Run both the WebSocket server and the MCP server."""
-
+    
+    print("🚀 Starting DIM MCP Server...")
+    print(f"🔧 Working directory: {__file__}")
+    
+    print("📡 Starting websocket server...")
     websocket_task = asyncio.create_task(start_websocket_server())
+    
+    print("🤖 Starting MCP server...")
+    mcp_task = asyncio.create_task(mcp.run_async())
+    
     try:
-        await mcp.run_async()
+        # Run both tasks concurrently
+        print("⚡ Running both servers concurrently...")
+        await asyncio.gather(websocket_task, mcp_task)
+    except Exception as e:
+        print(f"❌ Error running servers: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
+        # Cancel both tasks if one fails
+        print("🛑 Shutting down servers...")
         websocket_task.cancel()
+        mcp_task.cancel()
+        
+        # Wait for tasks to cleanup
         with contextlib.suppress(asyncio.CancelledError):
             await websocket_task
+        with contextlib.suppress(asyncio.CancelledError):
+            await mcp_task
 
 
 if __name__ == "__main__":

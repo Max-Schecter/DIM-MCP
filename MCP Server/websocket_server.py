@@ -5,6 +5,9 @@ import logging
 import ssl
 from pathlib import Path
 
+# Global state - these need to be thread-safe for MCP integration
+import threading
+_state_lock = threading.Lock()
 response_futures = {}
 _current_ws = None
 
@@ -38,7 +41,8 @@ async def getArmorSummary():
 
 async def handle_client(websocket, response_futures):
     global _current_ws
-    _current_ws = websocket
+    with _state_lock:
+        _current_ws = websocket
     logger.info(f"✅ DIM connected from: {websocket.remote_address}")
     try:
         async for message in websocket:
@@ -77,12 +81,12 @@ async def handle_client(websocket, response_futures):
 
             if mtype == "pong":
                 logger.info("🔁 Received pong from client")
-                weapons = await getWeaponsSummary()
-                armor = await getArmorSummary()
-                pong_message = {"type": "pong", "weapons": weapons, "armor": armor}
-                await websocket.send(json.dumps(pong_message))
+                logger.info(f"📊 Pong data keys: {list(msg.keys())}")
                 if "pong" in response_futures:
+                    logger.info("✅ Setting pong future result")
                     response_futures["pong"].set_result(msg)
+                else:
+                    logger.info("⚠️ No pong future waiting")
                 continue
     except websockets.exceptions.ConnectionClosed as e:
         logger.info(f"❌ DIM disconnected (code={getattr(e, 'code', '?')}, reason={getattr(e, 'reason', '')})")
@@ -127,19 +131,31 @@ async def main():
     armor_path = Path.home() / "Desktop" / "dim_armor.json"
 
 async def request_inventory():
-    if "pong" in response_futures:
-        del response_futures["pong"]
-    loop = asyncio.get_event_loop()
-    future = loop.create_future()
-    response_futures["pong"] = future
+    with _state_lock:
+        current_ws = _current_ws
+        if "pong" in response_futures:
+            del response_futures["pong"]
+        loop = asyncio.get_event_loop()
+        future = loop.create_future()
+        response_futures["pong"] = future
 
-    if _current_ws is not None:
-        await _current_ws.send(json.dumps({"type": "ping"}))
+    if current_ws is not None:
+        logger.info("📡 Sending ping to DIM")
+        await current_ws.send(json.dumps({"type": "ping"}))
     else:
         raise RuntimeError("No websocket connection available")
 
-    response = await future
-    return response
+    try:
+        logger.info("⏳ Waiting for pong response...")
+        response = await asyncio.wait_for(future, timeout=10.0)
+        logger.info("✅ Received pong response")
+        return response
+    except asyncio.TimeoutError:
+        logger.error("⏰ Timeout waiting for pong response")
+        raise RuntimeError("Timeout waiting for inventory data")
+    except Exception as e:
+        logger.error(f"❌ Error waiting for pong: {e}")
+        raise
 
 if __name__ == "__main__":
     try:
