@@ -28,7 +28,7 @@ mcp = FastMCP("Destiny Inventory Server", dependencies=["websockets"])
 
 
 @mcp.tool
-async def weapons_for_character() -> list[dict]:
+async def weapons_for_character() -> str:
     """Return all weapon items owned by the given character."""
 
     full_data = await request_inventory()
@@ -36,7 +36,7 @@ async def weapons_for_character() -> list[dict]:
 
 
 @mcp.tool
-async def armor_for_character()-> list[dict]:
+async def armor_for_character()-> str:
     """Return all armor items owned by the given character."""
 
     full_data = await request_inventory()
@@ -44,7 +44,7 @@ async def armor_for_character()-> list[dict]:
 
 
 @mcp.tool
-async def weapons_all() -> list[dict]:
+async def weapons_all() -> str:
     """Return stripped info for all weapons."""
 
     full_data = await request_inventory()
@@ -52,7 +52,7 @@ async def weapons_all() -> list[dict]:
 
 
 @mcp.tool
-async def armor_all() -> list[dict]:
+async def armor_all() -> str:
     """Return stripped info for all armor."""
 
     full_data = await request_inventory()
@@ -60,7 +60,7 @@ async def armor_all() -> list[dict]:
 
 
 @mcp.tool
-async def items_by_hashes(item_hashes: List[Union[int, str]]) -> list[dict]:
+async def items_by_hashes(item_hashes: List[Union[int, str]]) -> str:
     """Return items whose ID/hash matches any provided value."""
 
     full_data = await request_inventory()
