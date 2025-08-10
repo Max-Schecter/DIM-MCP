@@ -9,6 +9,8 @@ listed dependencies before running the server.
 
 import asyncio
 import contextlib
+import os
+import subprocess
 from typing import List, Union
 
 from fastmcp import FastMCP
@@ -67,24 +69,100 @@ async def items_by_hashes(item_hashes: List[Union[int, str]]) -> str:
     return get_items_by_hash(item_hashes, full_data)
 
 
+async def start_dim_process():
+    """Start the DIM development server using pnpm start."""
+    print("🎮 Starting DIM with pnpm start...")
+    
+    # Get the parent directory (DIM-MCP root)
+    dim_root = os.path.dirname(os.path.dirname(__file__))
+    
+    try:
+        # Start pnpm start process
+        process = await asyncio.create_subprocess_exec(
+            'pnpm', 'start',
+            cwd=dim_root,
+            stdout=subprocess.DEVNULL,  # Suppress DIM output
+            stderr=subprocess.DEVNULL   # Suppress DIM errors
+        )
+        
+        print(f"✅ DIM process started with PID: {process.pid}")
+        print("   DIM will be available at: https://localhost:8080")
+        
+        return process
+        
+    except Exception as e:
+        print(f"❌ Failed to start DIM: {e}")
+        return None
+
+
+async def stop_dim_process(dim_process):
+    """Stop the DIM process gracefully."""
+    if dim_process and dim_process.returncode is None:
+        print("🛑 Stopping DIM process...")
+        try:
+            # Send SIGTERM for graceful shutdown
+            dim_process.terminate()
+            
+            # Wait up to 10 seconds for graceful shutdown
+            try:
+                await asyncio.wait_for(dim_process.wait(), timeout=10.0)
+                print("✅ DIM process stopped gracefully")
+            except asyncio.TimeoutError:
+                print("⚠️ DIM process didn't stop gracefully, forcing kill...")
+                dim_process.kill()
+                await dim_process.wait()
+                print("✅ DIM process forcefully killed")
+                
+        except Exception as e:
+            print(f"❌ Error stopping DIM process: {e}")
+
+
 async def main() -> None:
-    """Run both the WebSocket server and the MCP server."""
+    """Run the WebSocket server, MCP server, and DIM development server."""
     
     print("🚀 Starting DIM MCP Server...")
-    print(f"🔧 Working directory: {__file__}")
+    print(f"🔧 Working directory: {os.path.dirname(__file__)}")
     
     websocket_task = None
     mcp_task = None
+    dim_process = None
     
     try:
+        # Check if pnpm is available
+        try:
+            result = await asyncio.create_subprocess_exec(
+                'pnpm', '--version',
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            await result.wait()
+            if result.returncode != 0:
+                raise Exception("pnpm not found")
+        except Exception:
+            print("❌ pnpm is not available - DIM will not start automatically")
+            
+        # Start DIM first (only if pnpm is available)  
+        if 'result' in locals() and result.returncode == 0:
+            print("📦 Starting DIM development server...")
+            dim_process = await start_dim_process()
+            if not dim_process:
+                print("❌ Failed to start DIM, continuing without it...")
+        else:
+            print("⚠️ Skipping DIM startup - pnpm not available")
+        
         print("📡 Starting websocket server...")
         websocket_task = asyncio.create_task(start_websocket_server(), name="websocket-server")
         
         print("🤖 Starting MCP server...")
         mcp_task = asyncio.create_task(mcp.run_async(), name="mcp-server")
         
-        # Run both tasks concurrently
-        print("⚡ Running both servers concurrently...")
+        # Run both server tasks concurrently
+        print("⚡ All services started:")
+        if dim_process:
+            print("   ✅ DIM: https://localhost:8080")
+        print("   ✅ WebSocket: ws://localhost:8765")
+        print("   ✅ MCP: stdio")
+        
         await asyncio.gather(websocket_task, mcp_task, return_exceptions=True)
         
     except KeyboardInterrupt:
@@ -94,21 +172,31 @@ async def main() -> None:
         import traceback
         traceback.print_exc()
     finally:
-        # Cancel both tasks if one fails or we're shutting down
-        print("🛑 Shutting down servers...")
+        # Shutdown sequence
+        print("\n🛑 Shutting down all services...")
         
+        # Cancel server tasks first
         if websocket_task and not websocket_task.done():
+            print("   Stopping websocket server...")
             websocket_task.cancel()
         if mcp_task and not mcp_task.done():
+            print("   Stopping MCP server...")
             mcp_task.cancel()
         
-        # Wait for tasks to cleanup gracefully
+        # Wait for server tasks to cleanup gracefully
         if websocket_task:
             with contextlib.suppress(asyncio.CancelledError):
                 await websocket_task
         if mcp_task:
             with contextlib.suppress(asyncio.CancelledError):
                 await mcp_task
+        
+        # Stop DIM process last
+        if dim_process:
+            print("   Stopping DIM...")
+            await stop_dim_process(dim_process)
+        
+        print("✅ All services stopped")
 
 
 if __name__ == "__main__":
