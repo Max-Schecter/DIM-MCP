@@ -31,6 +31,21 @@ Strongly prefer running these pnpm commands instead of directly executing tools 
 **Running Arbitrary TypeScript Code:**
 - Use `tsx` instead of `ts-node` to run TypeScript code directly. For example `npx tsx my-ts-file.ts`.
 
+## MCP Server
+
+**Important:** All Python dependencies for the MCP Server are installed in a virtual environment. Always activate the venv before running Python commands:
+
+```bash
+# Navigate to MCP Server directory and activate venv
+cd "MCP Server"
+source .venv/bin/activate  # On macOS/Linux
+# or
+.venv\Scripts\activate  # On Windows
+```
+
+**MCP Server Commands:**
+- Activate venv first, then run: `python MCP_server.py`
+
 ## Architecture Overview
 
 ### Core Structure
@@ -39,3 +54,4 @@ Strongly prefer running these pnpm commands instead of directly executing tools 
 - **src/locale/** - Internationalization files
 - **src/testing/** - Test utilities and setup
 - **config/** - Build configuration (webpack, i18n, etc.)
+- **MCP Server/** - Python MCP server with FastMCP that connects to DIM via WebSocket
