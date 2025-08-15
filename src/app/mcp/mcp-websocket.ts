@@ -51,6 +51,7 @@ function buildBaseItemSummary(
     power: item.power,
     stats,
     owner: store?.name ?? item.owner,
+    ownerId: store?.id ?? item.owner,
     tag: getTag(item),
     notes: getNotes(item),
   };
@@ -114,6 +115,19 @@ function buildArmorSummary(
   };
 }
 
+function buildStoreInfo(stores: readonly DimStore[]) {
+  return stores.map((store) => ({
+    id: store.id,
+    name: store.name,
+    isVault: store.isVault,
+    classType: store.classType,
+    className: store.className,
+    powerLevel: store.powerLevel,
+    background: store.background,
+    lastPlayed: store.lastPlayed?.toISOString(),
+  }));
+}
+
 async function sendInventory() {
   const state = store.getState();
   const allItems = allItemsSelector(state);
@@ -136,12 +150,15 @@ async function sendInventory() {
     .filter((item) => item.bucket.inArmor)
     .map((item) => buildArmorSummary(item, getTag, getNotes, statNames, stores));
 
+  const storeInfo = buildStoreInfo(stores);
+
   if (socket?.readyState === WebSocket.OPEN) {
     socket.send(
       JSON.stringify({
         type: 'pong',
         weapons: { type: 'weapons', data: weapons },
         armor: { type: 'armor', data: armor },
+        stores: { type: 'stores', data: storeInfo },
       }),
     );
   }

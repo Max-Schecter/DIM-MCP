@@ -1,125 +1,132 @@
-import json
+#!/usr/bin/env python3
+"""
+New test server following MCP server pattern.
+Launches websocket server and waits for user input to trigger pong requests.
+"""
+
 import asyncio
-from websocket_server import request_inventory, transfer_items, main as start_websocket_server
+import contextlib
+import json
+import os
+from pathlib import Path
 
-async def test_inventory():
-    """Test inventory fetching functionality"""
-    print("\n📡 Testing inventory fetch...")
-    try:
-        response = await request_inventory()
-        
-        weapons = response.get('weapons', {}).get('data', [])
-        armor = response.get('armor', {}).get('data', [])
-        
-        print(f"✅ Inventory fetched successfully!")
-        print(f"   📊 Found {len(weapons)} weapons and {len(armor)} armor pieces")
-        
-        # Show some sample items
-        if weapons:
-            sample_weapon = weapons[0]
-            print(f"   🔫 Sample weapon: {sample_weapon.get('name', 'Unknown')} (ID: {sample_weapon.get('id', 'Unknown')})")
-        
-        if armor:
-            sample_armor = armor[0]
-            print(f"   🛡️ Sample armor: {sample_armor.get('name', 'Unknown')} (ID: {sample_armor.get('id', 'Unknown')})")
-            
-        return weapons, armor
-        
-    except Exception as e:
-        print(f"❌ Inventory fetch failed: {e}")
-        return [], []
+from websocket_server import request_inventory, start_websocket_server
 
-async def test_transfer(item_ids: list, target_store: str):
-    """Test item transfer functionality"""
-    print(f"\n📦 Testing transfer of {len(item_ids)} items to {target_store}...")
-    try:
-        response = await transfer_items(item_ids, target_store)
-        
-        if response.get('success'):
-            results = response.get('results', [])
-            success_count = len([r for r in results if r.get('success')])
-            fail_count = len([r for r in results if not r.get('success')])
-            
-            print(f"✅ Transfer completed: {success_count} successful, {fail_count} failed")
-            
-            # Show detailed results
-            for result in results:
-                status = "✅" if result.get('success') else "❌"
-                item_id = result.get('instanceId', 'Unknown')
-                error = result.get('error', '')
-                print(f"   {status} {item_id[:16]}... {f'- {error}' if error else ''}")
-        else:
-            print(f"❌ Transfer failed: {response.get('error')}")
-            
-    except Exception as e:
-        print(f"❌ Transfer test failed: {e}")
 
 async def handle_user_input():
-    """Interactive command handler"""
-    print("\n🎮 Interactive Test Commands:")
-    print("   'inventory' - Test inventory fetch")
-    print("   'transfer' - Test item transfer (requires inventory first)")
-    print("   'ping' - Original ping test")
-    print("   'quit' - Exit")
-    
-    weapons, armor = [], []
+    """Handle user input in a separate task"""
+    print("\n🎮 Test Server Ready!")
+    print("Press Enter to request inventory from DIM and save to desktop...")
+    print("Type 'quit' and press Enter to exit\n")
     
     while True:
-        cmd = await asyncio.get_event_loop().run_in_executor(None, input, "\n>>> ")
-        cmd = cmd.strip().lower()
-        
-        if cmd == "quit":
-            print("👋 Exiting...")
-            break
+        try:
+            # Use a thread executor to handle blocking input
+            loop = asyncio.get_event_loop()
+            user_input = await loop.run_in_executor(None, input, ">>> ")
             
-        elif cmd == "inventory":
-            weapons, armor = await test_inventory()
+            if user_input.strip().lower() == 'quit':
+                print("👋 Exiting...")
+                break
             
-        elif cmd == "transfer":
-            if not weapons and not armor:
-                print("❌ No inventory data available. Run 'inventory' command first.")
-                continue
-                
-            # Use first few items for testing
-            test_items = []
-            all_items = weapons + armor
+            # Any other input (including Enter) triggers inventory request
+            print("📡 Requesting inventory from DIM...")
             
-            if len(all_items) >= 2:
-                test_items = [item['id'] for item in all_items[:2]]
-                print(f"🎯 Selected items for transfer:")
-                for i, item in enumerate(all_items[:2]):
-                    print(f"   {i+1}. {item.get('name', 'Unknown')} from {item.get('owner', 'Unknown')}")
-                
-                # Ask for target
-                target = await asyncio.get_event_loop().run_in_executor(None, input, "Enter target (vault/character name): ")
-                await test_transfer(test_items, target.strip())
-            else:
-                print("❌ Need at least 2 items in inventory for transfer test")
-                
-        elif cmd == "ping":
-            # Original ping functionality
             try:
-                print("[DEBUG] Calling request_inventory...")
                 response = await request_inventory()
-                pretty_response = json.dumps(response, indent=2)
-                print("[DEBUG] Inventory response (pretty):")
-                print(pretty_response)
-            except Exception as e:
-                print(f"[ERROR] Failed to request inventory: {e}")
                 
-        else:
-            print("❌ Unknown command. Try 'inventory', 'transfer', 'ping', or 'quit'")
+                # Save response to desktop
+                output_path = Path.home() / "Desktop" / "dim_inventory_response.json"
+                with open(output_path, "w") as f:
+                    json.dump(response, f, indent=2)
+                
+                # Log summary
+                weapons = response.get('weapons', {}).get('data', [])
+                armor = response.get('armor', {}).get('data', [])
+                stores = response.get('stores', {}).get('data', [])
+                
+                print(f"✅ Inventory saved to: {output_path}")
+                print(f"📊 Summary: {len(weapons)} weapons, {len(armor)} armor, {len(stores)} stores")
+                
+                # Show store info
+                if stores:
+                    print("🏪 Stores found:")
+                    for store in stores:
+                        if store.get('isVault'):
+                            print(f"   🏛️ {store.get('name')} (ID: {store.get('id')})")
+                        else:
+                            print(f"   👤 {store.get('name')} - {store.get('className')} (Power: {store.get('powerLevel')})")
+                
+                print("\nPress Enter again to request inventory, or 'quit' to exit...")
+                
+            except Exception as e:
+                print(f"❌ Failed to request inventory: {e}")
+                print("Make sure DIM is running and connected...")
+                
+        except Exception as e:
+            print(f"❌ Input error: {e}")
+            break
 
 
+async def main():
+    """Main function following MCP server pattern"""
+    print("🚀 Starting DIM Test Server...")
+    print(f"🔧 Working directory: {__file__}")
+    
+    websocket_task = None
+    input_task = None
+    
+    try:
+        print("📡 Starting websocket server...")
+        websocket_task = asyncio.create_task(start_websocket_server(), name="websocket-server")
+        
+        print("⌨️ Starting input handler...")
+        input_task = asyncio.create_task(handle_user_input(), name="input-handler")
+        
+        # --- Orphan guard: exit if launcher disappears (PPID becomes 1) ---
+        async def _orphan_guard():
+            while True:
+                try:
+                    if os.getppid() == 1:
+                        # Fast, reliable exit to avoid zombies or relaunch loops
+                        os._exit(0)
+                    await asyncio.sleep(2)
+                except Exception:
+                    # If anything goes wrong, fail safe by exiting
+                    os._exit(0)
+        asyncio.create_task(_orphan_guard(), name="orphan-guard")
+        # -----------------------------------------------------------------
+        
+        # Run both tasks concurrently
+        print("⚡ Running websocket server and input handler concurrently...")
+        await asyncio.gather(websocket_task, input_task, return_exceptions=True)
+        
+    except KeyboardInterrupt:
+        print("\n⚠️ Keyboard interrupt received, shutting down...")
+    except Exception as e:
+        print(f"❌ Error running server: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        # Cancel both tasks if one fails or we're shutting down
+        print("🛑 Shutting down...")
+        
+        if websocket_task and not websocket_task.done():
+            websocket_task.cancel()
+        if input_task and not input_task.done():
+            input_task.cancel()
+        
+        # Wait for tasks to cleanup gracefully
+        if websocket_task:
+            with contextlib.suppress(asyncio.CancelledError):
+                await websocket_task
+        if input_task:
+            with contextlib.suppress(asyncio.CancelledError):
+                await input_task
 
 
 if __name__ == "__main__":
-    async def start_all():
-        server_task = asyncio.create_task(start_websocket_server())
-        input_task = asyncio.create_task(handle_user_input())
-        await asyncio.gather(server_task, input_task)
-
     try:
-        asyncio.run(start_all())
+        asyncio.run(main())
     except KeyboardInterrupt:
         print("\n👋 Shutting down...")

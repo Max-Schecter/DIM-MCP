@@ -39,6 +39,16 @@ async def getArmorSummary():
         logger.error(f"❌ Failed to load armor summary: {e}")
         return []
 
+async def getStoresSummary():
+    stores_output_path = Path.home() / "Desktop" / "dim_stores.json"
+    try:
+        with open(stores_output_path, "r") as f:
+            stores = json.load(f)
+        return stores
+    except Exception as e:
+        logger.error(f"❌ Failed to load stores summary: {e}")
+        return []
+
 async def handle_client(websocket, response_futures):
     global _current_ws
     with _state_lock:
@@ -77,6 +87,15 @@ async def handle_client(websocket, response_futures):
                     json.dump(armor, f, indent=2)
                 logger.info(f"📁 Saved armor summary to: {armor_output_path}")
                 logger.info("🦺 Armor summary received")
+                continue
+
+            if mtype == "stores":
+                stores = msg.get("data")
+                stores_output_path = Path.home() / "Desktop" / "dim_stores.json"
+                with open(stores_output_path, "w") as f:
+                    json.dump(stores, f, indent=2)
+                logger.info(f"📁 Saved stores summary to: {stores_output_path}")
+                logger.info("🏪 Stores summary received")
                 continue
 
             if mtype == "pong":
@@ -132,7 +151,7 @@ async def start_websocket_server():
             max_size=None,       # accept messages of any size (our chunks are ~2 MB)
             max_queue=64,        # buffer more frames if needed
         )
-        
+
         # Keep the server running
         await server.wait_closed()
     except Exception as e:
@@ -145,10 +164,6 @@ async def main():
         await start_websocket_server()
     except KeyboardInterrupt:
         logger.info("\n👋 Shutting down server...")
-
-
-    weapons_path = Path.home() / "Desktop" / "dim_weapons.json"
-    armor_path = Path.home() / "Desktop" / "dim_armor.json"
 
 async def request_inventory():
     with _state_lock:
@@ -180,14 +195,14 @@ async def request_inventory():
 async def transfer_items(instance_ids: list[str], target_store_id: str):
     """
     Transfer items by their instance IDs to a target character/store.
-    
+
     Args:
         instance_ids: List of item instance IDs to transfer
         target_store_id: Character ID or 'vault' to transfer items to
-    
+
     Returns:
         Dict containing transfer results
-        
+
     Raises:
         RuntimeError: If no websocket connection or timeout
     """
@@ -214,20 +229,20 @@ async def transfer_items(instance_ids: list[str], target_store_id: str):
         logger.info("⏳ Waiting for transfer response...")
         response = await asyncio.wait_for(future, timeout=30.0)  # Longer timeout for transfers
         logger.info("✅ Received transfer response")
-        
+
         if response.get("success"):
             results = response.get("results", [])
             success_count = len([r for r in results if r.get("success")])
             fail_count = len([r for r in results if not r.get("success")])
             logger.info(f"📊 Transfer completed: {success_count} successful, {fail_count} failed")
-            
+
             # Log failed transfers for debugging
             for result in results:
                 if not result.get("success"):
                     logger.warning(f"❌ Failed to transfer {result.get('instanceId')}: {result.get('error')}")
         else:
             logger.error(f"❌ Transfer failed: {response.get('error')}")
-            
+
         return response
     except asyncio.TimeoutError:
         logger.error("⏰ Timeout waiting for transfer response")
