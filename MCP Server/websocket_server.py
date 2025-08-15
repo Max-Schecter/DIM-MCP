@@ -88,6 +88,15 @@ async def handle_client(websocket, response_futures):
                 else:
                     logger.info("⚠️ No pong future waiting")
                 continue
+
+            if mtype == "transfer_items_response":
+                logger.info("📦 Received transfer items response from client")
+                if "transfer_items" in response_futures:
+                    logger.info("✅ Setting transfer items future result")
+                    response_futures["transfer_items"].set_result(msg)
+                else:
+                    logger.info("⚠️ No transfer items future waiting")
+                continue
     except websockets.exceptions.ConnectionClosed as e:
         logger.info(f"❌ DIM disconnected (code={getattr(e, 'code', '?')}, reason={getattr(e, 'reason', '')})")
     except Exception as e:
@@ -166,6 +175,65 @@ async def request_inventory():
         raise RuntimeError("Timeout waiting for inventory data")
     except Exception as e:
         logger.error(f"❌ Error waiting for pong: {e}")
+        raise
+
+async def transfer_items(instance_ids: list[str], target_store_id: str):
+    """
+    Transfer items by their instance IDs to a target character/store.
+    
+    Args:
+        instance_ids: List of item instance IDs to transfer
+        target_store_id: Character ID or 'vault' to transfer items to
+    
+    Returns:
+        Dict containing transfer results
+        
+    Raises:
+        RuntimeError: If no websocket connection or timeout
+    """
+    with _state_lock:
+        current_ws = _current_ws
+        if "transfer_items" in response_futures:
+            del response_futures["transfer_items"]
+        loop = asyncio.get_event_loop()
+        future = loop.create_future()
+        response_futures["transfer_items"] = future
+
+    if current_ws is not None:
+        message = {
+            "type": "transfer_items",
+            "instanceIds": instance_ids,
+            "targetStoreId": target_store_id
+        }
+        logger.info(f"📦 Sending transfer request for {len(instance_ids)} items to {target_store_id}")
+        await current_ws.send(json.dumps(message))
+    else:
+        raise RuntimeError("No websocket connection available")
+
+    try:
+        logger.info("⏳ Waiting for transfer response...")
+        response = await asyncio.wait_for(future, timeout=30.0)  # Longer timeout for transfers
+        logger.info("✅ Received transfer response")
+        
+        if response.get("success"):
+            results = response.get("results", [])
+            success_count = len([r for r in results if r.get("success")])
+            fail_count = len([r for r in results if not r.get("success")])
+            logger.info(f"📊 Transfer completed: {success_count} successful, {fail_count} failed")
+            
+            # Log failed transfers for debugging
+            for result in results:
+                if not result.get("success"):
+                    logger.warning(f"❌ Failed to transfer {result.get('instanceId')}: {result.get('error')}")
+        else:
+            logger.error(f"❌ Transfer failed: {response.get('error')}")
+            
+        return response
+    except asyncio.TimeoutError:
+        logger.error("⏰ Timeout waiting for transfer response")
+        raise RuntimeError("Timeout waiting for transfer completion")
+    except Exception as e:
+        logger.error(f"❌ Error waiting for transfer response: {e}")
         raise
 
 if __name__ == "__main__":

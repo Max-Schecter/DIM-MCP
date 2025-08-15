@@ -29,32 +29,32 @@ mcp = FastMCP("Destiny Inventory Server", dependencies=["websockets"])
 
 
 @mcp.tool
-async def weapons_for_character() -> str:
-    """Return all weapon items owned by the given character."""
+async def weapons_for_current_character() -> str:
+    """Return all weapon items owned by the current character, only use if user is requesting armor for current character. Otherwise default to account wide."""
 
     full_data = await request_inventory()
     return get_weapons_current_character(full_data, "Human Warlock")
 
 
 @mcp.tool
-async def armor_for_character()-> str:
-    """Return all armor items owned by the given character."""
+async def armor_for_current_character()-> str:
+    """Return all armor items owned by the current character, only use if user is requesting armor for current character. Otherwise default to account wide."""
 
     full_data = await request_inventory()
     return get_armor_current_character(full_data, "Human Warlock")
 
 
 @mcp.tool
-async def weapons_all() -> str:
-    """Return stripped info for all weapons."""
+async def get_weapons_account_wide() -> str:
+    """Return stripped info for all weapons on account (including vault)."""
 
     full_data = await request_inventory()
     return get_weapons_all(full_data)
 
 
 @mcp.tool
-async def armor_all() -> str:
-    """Return stripped info for all armor."""
+async def get_armor_account_wide() -> str:
+    """Return stripped info for all armor on account (including vault)."""
 
     full_data = await request_inventory()
     return get_armor_all(full_data)
