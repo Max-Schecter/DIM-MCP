@@ -39,6 +39,16 @@ async def weapons_for_current_character() -> str:
     full_data = await request_inventory()
     return get_weapons_current_character(full_data, "Human Warlock")
 
+@mcp.tool
+async def get_important_destiny_rules() -> str:
+    """
+    Returns important information about Destiny 2 loadouts. No input required. Safe to cache for the session.
+    """
+    return (
+        "### Important Destiny 2 Loadout Rules\n"
+        "- Only **ONE exotic weapon** can be equipped\n"
+        "- Only **ONE exotic armor piece** can be equipped"
+    )
 
 @mcp.tool
 async def armor_for_current_character()-> str:
