@@ -20,12 +20,16 @@ from Data_Parsing import (
     get_items_by_hash,
     get_weapons_all,
     get_weapons_current_character,
+    get_most_recent_character_id,
+    get_most_recent_character_name,
+    process_transfer_response,
+
 )
-from websocket_server import request_inventory, start_websocket_server
+from websocket_server import request_inventory, transfer_items, start_websocket_server
 
 
 # FastMCP will ensure required packages are installed before start-up.
-mcp = FastMCP("Destiny Inventory Server", dependencies=["websockets"])
+mcp = FastMCP("Destiny_Inventory_Server", dependencies=["websockets"])
 
 
 @mcp.tool
@@ -59,7 +63,6 @@ async def get_armor_account_wide() -> str:
     full_data = await request_inventory()
     return get_armor_all(full_data)
 
-
 @mcp.tool
 async def items_by_hashes(item_hashes: List[Union[int, str]]) -> str:
     """Return items whose ID/hash matches any provided value."""
@@ -67,6 +70,28 @@ async def items_by_hashes(item_hashes: List[Union[int, str]]) -> str:
     full_data = await request_inventory()
     return get_items_by_hash(item_hashes, full_data)
 
+@mcp.tool
+async def transfer_items_to_character(item_hashes: List[Union[int, str]]) -> str:
+    """Transfer items whose ID/hash matches any provided value to the user's current character."""
+    full_data = await request_inventory()
+    character_id = get_most_recent_character_id(full_data)
+
+    response = await transfer_items(item_hashes, character_id)
+    return process_transfer_response(response)
+
+@mcp.tool
+async def transfer_items_to_vault(item_hashes: List[Union[int, str]]) -> str:
+    """Transfer items whose ID/hash matches any provided value to the user's vault."""
+
+    response = await transfer_items(item_hashes, "vault")
+    return process_transfer_response(response)
+
+@mcp.tool
+async def get_current_character() -> str:
+    """Return the race and class of the user's current character."""
+    full_data = await request_inventory()
+
+    return get_most_recent_character_name(full_data)
 
 async def main() -> None:
     """Run both the WebSocket server and the MCP server."""

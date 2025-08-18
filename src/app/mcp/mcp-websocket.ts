@@ -14,6 +14,7 @@ import type { DimStore } from 'app/inventory/store-types';
 import { getStore } from 'app/inventory/stores-helpers';
 import { showNotification } from 'app/notifications/notifications';
 import { D1_StatHashes } from 'app/search/d1-known-values';
+import { refresh } from 'app/shell/refresh-events';
 import store from 'app/store/store';
 import {
   getItemKillTrackerInfo,
@@ -286,6 +287,11 @@ async function handleTransferItems(message: TransferItemsMessage) {
       title: 'Bulk Transfer Complete',
       body: `${successCount} items transferred successfully${failCount > 0 ? `, ${failCount} failed` : ''}`,
     });
+
+    // Refresh inventory after successful transfers
+    if (successCount > 0) {
+      refresh();
+    }
   } catch (error) {
     console.error('Error handling transfer_items:', error);
 
